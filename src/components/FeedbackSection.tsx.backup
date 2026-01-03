@@ -16,12 +16,26 @@ import { toast } from 'sonner';
 import { FeedbackQuestion } from './FeedbackQuestion';
 import type { FeedbackQuestion as FeedbackQuestionType } from '@/types/feedback';
 
+// Add pulsing animation for copied state
+const pulsingStyle = `
+  @keyframes pulse-green {
+    0%, 100% {
+      box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+    }
+    50% {
+      box-shadow: 0 0 0 10px rgba(34, 197, 94, 0);
+    }
+  }
+  .animate-pulse-green {
+    animation: pulse-green 2s infinite;
+  }
+`;
+
 type FeedbackSectionProps = {
   id: string;
   title: string;
   questions: FeedbackQuestionType[];
   defaultOpen?: boolean;
-  forceOpen?: boolean;
   onQuestionsReorder?: (updatedQuestions: FeedbackQuestionType[]) => void;
   isEditing?: boolean;
   onStartEditing?: (sectionId: string) => void;
@@ -44,7 +58,6 @@ export function FeedbackSection({
   title,
   questions,
   defaultOpen = false,
-  forceOpen = false,
   onQuestionsReorder,
   isEditing = false,
   onStartEditing,
@@ -72,7 +85,6 @@ export function FeedbackSection({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [moduleTitle, setModuleTitle] = useState(title);
   const [isSavingTitle, setIsSavingTitle] = useState(false);
-  const [isQuestionReorderMode, setIsQuestionReorderMode] = useState(false);
   const { theme } = useTheme();
 
   useEffect(() => {
@@ -99,8 +111,21 @@ export function FeedbackSection({
     theme === 'dark'
       ? `${baseActionButtonClasses} text-white border border-purple-500/40 bg-gradient-to-br from-purple-500/20 to-violet-600/20 hover:from-purple-500/30 hover:to-violet-600/30 shadow-lg shadow-purple-500/20 hover:shadow-purple-500/30`
       : `${baseActionButtonClasses} text-white border border-purple-500/40 bg-gradient-to-br from-purple-500 to-violet-600 hover:from-purple-600 hover:to-violet-700 shadow-lg shadow-purple-500/30 hover:shadow-purple-500/40`;
+  const editButtonClasses =
+    theme === 'dark'
+      ? `${baseActionButtonClasses} text-white/80 bg-white/6 border border-white/10 hover:text-white`
+      : `${baseActionButtonClasses} text-slate-800 bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-50`;
 
   const effectiveEditing = canManage && isEditing;
+
+  const handleEditToggle = () => {
+    if (!canManage) return;
+    if (effectiveEditing) {
+      onStopEditing?.(sectionId);
+    } else if (!editingDisabled) {
+      onStartEditing?.(sectionId);
+    }
+  };
 
   const handleAddQuestion = async () => {
     if (!formContent.trim()) {
@@ -119,6 +144,16 @@ export function FeedbackSection({
       toast.success('Question added!');
     } catch (error: any) {
       toast.error(error.message || 'Failed to add question');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+    setIsSubmitting(true);
+    try {
+      await onDeleteElement(sectionId, elementId);
+      toast.success('Comment deleted!');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete comment');
     } finally {
       setIsSubmitting(false);
     }
@@ -177,15 +212,17 @@ export function FeedbackSection({
     'border border-purple-500/50 bg-purple-500/5 shadow-inner shadow-purple-500/10';
 
   return (
-    <div
-      id={sectionId}
-      className={`rounded-2xl border overflow-hidden ${
-        theme === 'dark'
-          ? 'bg-gradient-to-br from-[#050505] to-[#1f0139] border-purple-900/30'
-          : 'bg-gradient-to-br from-slate-50 to-slate-100 border-purple-200'
-      } ${isEditing ? 'ring-2 ring-purple-500/60' : ''}`}
-      {...props}
-    >
+    <>
+      <style>{pulsingStyle}</style>
+      <div
+        id={sectionId}
+        className={`rounded-2xl border overflow-hidden ${
+          theme === 'dark'
+            ? 'bg-gradient-to-br from-[#050505] to-[#1f0139] border-purple-900/30'
+            : 'bg-gradient-to-br from-slate-50 to-slate-100 border-purple-200'
+        } ${isEditing ? 'ring-2 ring-purple-500/60' : ''}`}
+        {...props}
+      >
       {/* Section Header */}
       {isEditingTitle ? (
         <div
@@ -248,7 +285,7 @@ export function FeedbackSection({
                 </button>
               </div>
               <p className={theme === 'dark' ? 'text-slate-500' : 'text-slate-600'}>
-                {localQuestions.length} Questions
+                {localElements.length} Comments
               </p>
             </div>
           </div>
@@ -308,11 +345,11 @@ export function FeedbackSection({
                 )}
               </div>
               <p className={theme === 'dark' ? 'text-slate-500' : 'text-slate-600'}>
-                {localQuestions.length} Questions
+                {localElements.length} Comments
               </p>
               {effectiveEditing && (
                 <p className="mt-1 text-xs font-semibold text-purple-300">
-                  Managing module
+                  Drag to reorder comments
                 </p>
               )}
             </div>
@@ -324,7 +361,7 @@ export function FeedbackSection({
                 <button
                   type="button"
                   className={addButtonClasses}
-                  aria-label={`Add question to ${moduleTitle}`}
+                  aria-label={`Add comment to ${moduleTitle}`}
                   disabled={editingDisabled && !effectiveEditing}
                   onClick={e => {
                     e.stopPropagation();
@@ -337,34 +374,32 @@ export function FeedbackSection({
                   }}
                 >
                   <Plus className="w-4 h-4" />
-                  <span className="sr-only">Add question</span>
+                  <span className="sr-only">Add comment</span>
                 </button>
                 <button
                   type="button"
-                  className={`${baseActionButtonClasses} ${
-                    isQuestionReorderMode
-                      ? theme === 'dark'
-                        ? 'text-emerald-400 bg-emerald-500/20 border border-emerald-500/40'
-                        : 'text-emerald-700 bg-emerald-100 border border-emerald-300'
-                      : theme === 'dark'
-                      ? 'text-amber-400 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20'
-                      : 'text-amber-600 bg-amber-50 border border-amber-200 hover:bg-amber-100'
-                  }`}
-                  aria-label="Reorder questions"
+                  className={editButtonClasses}
+                  aria-label={`Reorder comments in ${moduleTitle}`}
                   onClick={e => {
                     e.stopPropagation();
                     if (!isOpen) {
                       setIsOpen(true);
                     }
-                    setIsQuestionReorderMode(!isQuestionReorderMode);
+                    handleEditToggle();
                   }}
+                  disabled={editingDisabled && !effectiveEditing}
                 >
-                  {isQuestionReorderMode ? (
-                    <Check className="w-4 h-4" />
+                  {effectiveEditing ? (
+                    <>
+                      <Check className="w-4 h-4 text-emerald-400" />
+                      <span className="sr-only">Done editing</span>
+                    </>
                   ) : (
-                    <ChevronsUpDown width={16} height={16} stroke="#fbbf24" />
+                    <>
+                      <ChevronsUpDown width={16} height={16} stroke="#fbbf24" />
+                      <span className="sr-only">Reorder comments</span>
+                    </>
                   )}
-                  <span className="sr-only">Reorder questions</span>
                 </button>
                 <button
                   type="button"
@@ -372,7 +407,7 @@ export function FeedbackSection({
                   aria-label={`Delete ${moduleTitle}`}
                   onClick={async (e) => {
                     e.stopPropagation();
-                    if (window.confirm(`Are you sure you want to delete the module "${moduleTitle}"? This will also delete all questions and comments in this module.`)) {
+                    if (window.confirm(`Are you sure you want to delete the module "${moduleTitle}"? This will also delete all comments in this module.`)) {
                       await onDeleteModule?.(sectionId);
                     }
                   }}
@@ -386,14 +421,42 @@ export function FeedbackSection({
         </div>
       )}
 
-      {/* Questions List */}
+      {/* Elements List */}
       {isOpen && (
         <div
           className={`border-t ${
             theme === 'dark' ? 'border-slate-800' : 'border-slate-200'
           }`}
         >
-          {/* Add Question Form */}
+          {/* Table Header */}
+          <div
+            className={`hidden md:grid md:grid-cols-12 gap-4 px-6 py-2 text-[11px] font-medium tracking-wide uppercase ${
+              theme === 'dark'
+                ? 'bg-[#050716] text-slate-300'
+                : 'bg-slate-100/80 text-slate-700'
+            }`}
+          >
+            <div className="col-span-10">
+              <span>Comment</span>
+            </div>
+            {canManage && (
+              <div className="col-span-2 flex items-center justify-center gap-1">
+                <span>Actions</span>
+              </div>
+            )}
+            {!canManage && (
+              <div className="col-span-2 flex flex-col items-center justify-center">
+                <span className="text-[11px] font-medium tracking-wide uppercase">Copy</span>
+                <span className={`text-[9px] font-normal normal-case mt-0.5 ${
+                  theme === 'dark' ? 'text-slate-500' : 'text-slate-500'
+                }`}>
+                  Click anywhere
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Edit Form - Show when activeForm is set */}
           {activeForm && canManage && (
             <div
               className={`p-4 mx-4 mt-4 rounded-lg border ${
@@ -402,26 +465,30 @@ export function FeedbackSection({
                   : 'bg-slate-50 border-slate-200'
               }`}
             >
-              <input
-                type="text"
+              <textarea
                 value={formContent}
                 onChange={(e) => setFormContent(e.target.value)}
-                placeholder="Enter question title..."
+                placeholder="Enter feedback comment..."
                 disabled={isSubmitting}
                 className={`w-full p-3 rounded border text-sm ${
                   theme === 'dark'
                     ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400'
                     : 'bg-white border-slate-300 text-slate-900 placeholder-slate-500'
                 } focus:outline-none focus:ring-2 focus:ring-purple-500`}
+                rows={4}
               />
               <div className="flex gap-2 mt-3">
                 <button
                   type="button"
-                  onClick={handleAddQuestion}
+                  onClick={
+                    activeForm.mode === 'create'
+                      ? handleAddElement
+                      : handleUpdateElement
+                  }
                   disabled={isSubmitting || !formContent.trim()}
                   className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isSubmitting ? 'Saving...' : 'Add Question'}
+                  {isSubmitting ? 'Saving...' : activeForm.mode === 'create' ? 'Add' : 'Update'}
                 </button>
                 <button
                   type="button"
@@ -438,114 +505,259 @@ export function FeedbackSection({
             </div>
           )}
 
-          {/* Questions */}
-          <div className="p-4 space-y-2">
-            {localQuestions.length === 0 ? (
-              <div className={`px-6 py-8 text-center ${
-                theme === 'dark' ? 'text-slate-400' : 'text-slate-600'
-              }`}>
-                <p className="text-sm italic">No questions in this module</p>
-              </div>
-            ) : isQuestionReorderMode ? (
+          {/* Elements Rows */}
+          {effectiveEditing ? (
+            <div className="space-y-4 p-4">
               <Reorder.Group
                 axis="y"
-                values={localQuestions}
-                onReorder={questions => {
-                  setLocalQuestions(questions);
-                  onQuestionsReorder?.(questions);
-                }}
-                className="space-y-2"
+                values={localElements}
+                onReorder={handleReorder}
+                className="divide-y divide-transparent space-y-3"
               >
-                {localQuestions.map(question => (
+                {localElements.map(element => (
                   <Reorder.Item
-                    key={question.id}
-                    value={question}
-                    className="focus-visible:outline-none"
+                    key={element.id}
+                    value={element}
+                    className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/40"
+                    whileDrag={{ scale: 1.01 }}
                   >
-                    <div className="flex items-center gap-2">
-                      <GripVertical className="w-5 h-5 text-slate-400 cursor-grab active:cursor-grabbing flex-shrink-0" />
-                      <div className="flex-1">
-                        <FeedbackQuestion
-                          id={question.id}
-                          moduleId={sectionId}
-                          title={question.title}
-                          elements={question.elements}
-                          forceOpen={forceOpen}
-                          canManage={canManage}
-                          theme={theme}
-                          onAddElement={async (questionId, content) => {
-                            if (onAddElement) {
-                              await onAddElement(sectionId, questionId, content);
-                            }
-                          }}
-                          onUpdateElement={async (questionId, elementId, content) => {
-                            if (onUpdateElement) {
-                              await onUpdateElement(sectionId, questionId, elementId, content);
-                            }
-                          }}
-                          onDeleteElement={async (questionId, elementId) => {
-                            if (onDeleteElement) {
-                              await onDeleteElement(sectionId, questionId, elementId);
-                            }
-                          }}
-                          onUpdateQuestion={(questionId, newTitle) => {
-                            if (onUpdateQuestion) {
-                              onUpdateQuestion(sectionId, questionId, newTitle);
-                            }
-                          }}
-                          onDeleteQuestion={async (questionId) => {
-                            if (onDeleteQuestion) {
-                              await onDeleteQuestion(sectionId, questionId);
-                            }
-                          }}
-                        />
-                      </div>
-                    </div>
+                    <FeedbackElementRow
+                      element={element}
+                      isEditing={true}
+                      theme={theme}
+                      onCopy={handleCopy}
+                      copiedId={copiedId}
+                      wasCopiedAgain={wasCopiedAgain}
+                      canManage={canManage}
+                      onEdit={() => {
+                        setActiveForm({ mode: 'edit', element });
+                        setFormContent(element.content);
+                      }}
+                      onDelete={() => handleDeleteElement(element.id)}
+                      isSubmitting={isSubmitting}
+                    />
                   </Reorder.Item>
                 ))}
               </Reorder.Group>
-            ) : (
-              localQuestions.map(question => (
-                <FeedbackQuestion
-                  key={question.id}
-                  id={question.id}
-                  moduleId={sectionId}
-                  title={question.title}
-                  elements={question.elements}
-                  forceOpen={forceOpen}
-                  canManage={canManage}
-                  theme={theme}
-                  onAddElement={async (questionId, content) => {
-                    if (onAddElement) {
-                      await onAddElement(sectionId, questionId, content);
+            </div>
+          ) : (
+            <div
+              className={`divide-y ${
+                theme === 'dark' ? 'divide-slate-800' : 'divide-slate-200'
+              }`}
+            >
+              {localElements.length === 0 ? (
+                <div className={`px-6 py-8 text-center ${
+                  theme === 'dark' ? 'text-slate-400' : 'text-slate-600'
+                }`}>
+                  <p className="text-sm italic">No comments in this module</p>
+                </div>
+              ) : (
+                localElements.map(element => (
+                  <FeedbackElementRow
+                    key={element.id}
+                    element={element}
+                    isEditing={false}
+                    theme={theme}
+                    onCopy={handleCopy}
+                    copiedId={copiedId}
+                    wasCopiedAgain={wasCopiedAgain}
+                    canManage={canManage}
+                    onEdit={
+                      canManage
+                        ? () => {
+                            setActiveForm({ mode: 'edit', element });
+                            setFormContent(element.content);
+                          }
+                        : undefined
                     }
-                  }}
-                  onUpdateElement={async (questionId, elementId, content) => {
-                    if (onUpdateElement) {
-                      await onUpdateElement(sectionId, questionId, elementId, content);
-                    }
-                  }}
-                  onDeleteElement={async (questionId, elementId) => {
-                    if (onDeleteElement) {
-                      await onDeleteElement(sectionId, questionId, elementId);
-                    }
-                  }}
-                  onUpdateQuestion={(questionId, newTitle) => {
-                    if (onUpdateQuestion) {
-                      onUpdateQuestion(sectionId, questionId, newTitle);
-                    }
-                  }}
-                  onDeleteQuestion={async (questionId) => {
-                    if (onDeleteQuestion) {
-                      await onDeleteQuestion(sectionId, questionId);
-                    }
-                  }}
-                />
-              ))
-            )}
-          </div>
+                    onDelete={canManage ? () => handleDeleteElement(element.id) : undefined}
+                    isSubmitting={isSubmitting}
+                  />
+                ))
+              )}
+            </div>
+          )}
         </div>
       )}
+    </div>
+    </>
+  );
+}
+
+interface FeedbackElementRowProps {
+  element: FeedbackElement;
+  isEditing: boolean;
+  theme: string;
+  onCopy: (content: string, elementId: string) => void;
+  copiedId: string | null;
+  wasCopiedAgain: boolean;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  isSubmitting?: boolean;
+  canManage?: boolean;
+}
+
+function FeedbackElementRow({
+  element,
+  isEditing,
+  theme,
+  onCopy,
+  copiedId,
+  wasCopiedAgain,
+  onEdit,
+  onDelete,
+  isSubmitting,
+  canManage,
+}: FeedbackElementRowProps) {
+  const handleRowClick = () => {
+    // In grader mode (when canManage is false), clicking anywhere copies
+    if (!canManage) {
+      onCopy(element.content, element.id);
+    }
+  };
+
+  return (
+    <div
+      className={`group transition-colors relative border-l-4 ${
+        !canManage && copiedId === element.id
+          ? 'border-l-green-500 bg-green-500/10'
+          : 'border-l-transparent'
+      } ${
+        theme === 'dark' ? 'hover:bg-slate-800/50' : 'hover:bg-slate-100/50'
+      } ${isEditing ? 'ring-2 ring-purple-500/40 bg-purple-500/5' : ''} ${
+        !canManage ? 'cursor-pointer' : ''
+      }`}
+      style={{ cursor: isEditing ? 'grab' : !canManage ? 'pointer' : 'default' }}
+      onClick={!canManage ? handleRowClick : undefined}
+    >
+      {/* Copied Indicator - Only show in GRADER mode */}
+      {!canManage && copiedId === element.id && (
+        <div className={`absolute top-2 right-2 ${
+          wasCopiedAgain ? 'bg-blue-600' : 'bg-green-600'
+        } text-white px-3 py-1 rounded-full text-xs font-semibold shadow-lg z-10`}>
+          <span className="inline-block animate-pulse">
+            {wasCopiedAgain ? 'Already Copied!' : 'Copied!'}
+          </span>
+        </div>
+      )}
+      
+      {/* Desktop Layout */}
+      <div className="hidden md:grid md:grid-cols-12 gap-4 px-6 py-4 items-start">
+        {/* Comment Content */}
+        <div className="col-span-10">
+          <p
+            className={`text-sm whitespace-pre-wrap ${
+              theme === 'dark' ? 'text-slate-300' : 'text-slate-700'
+            }`}
+          >
+            {element.content}
+          </p>
+        </div>
+
+        {/* Actions */}
+        <div className="col-span-2 flex items-center justify-center gap-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation(); // Prevent row click
+              onCopy(element.content, element.id);
+            }}
+            className={`p-2 rounded transition-colors ${
+              copiedId === element.id
+                ? 'bg-green-600 text-white animate-pulse-green'
+                : theme === 'dark'
+                ? `bg-slate-700 text-slate-300 hover:bg-slate-600 ${canManage ? 'opacity-0 group-hover:opacity-100' : ''}`
+                : `bg-slate-200 text-slate-700 hover:bg-slate-300 ${canManage ? 'opacity-0 group-hover:opacity-100' : ''}`
+            }`}
+            aria-label="Copy comment"
+          >
+            <Copy className="w-4 h-4" />
+          </button>
+          {canManage && onEdit && (
+            <>
+              <button
+                onClick={onEdit}
+                disabled={isSubmitting}
+                className={`p-2 rounded transition-colors ${
+                  theme === 'dark'
+                    ? 'hover:bg-slate-700 text-slate-400'
+                    : 'hover:bg-slate-200 text-slate-600'
+                }`}
+                aria-label="Edit"
+              >
+                <Edit2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={onDelete}
+                disabled={isSubmitting}
+                className={`p-2 rounded transition-colors ${
+                  theme === 'dark'
+                    ? 'hover:bg-red-900/30 text-red-400'
+                    : 'hover:bg-red-100 text-red-600'
+                }`}
+                aria-label="Delete"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Mobile Layout */}
+      <div className="md:hidden p-4 space-y-3">
+        <p
+          className={`text-sm whitespace-pre-wrap ${
+            theme === 'dark' ? 'text-slate-300' : 'text-slate-700'
+          }`}
+        >
+          {element.content}
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation(); // Prevent row click
+              onCopy(element.content, element.id);
+            }}
+            className={`flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm ${
+              copiedId === element.id
+                ? 'bg-green-600 text-white animate-pulse-green'
+                : theme === 'dark'
+                ? 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+            }`}
+          >
+            <Copy className="w-4 h-4" />
+            {copiedId === element.id ? 'Copied' : 'Copy'}
+          </button>
+          {onEdit && (
+            <button
+              onClick={onEdit}
+              disabled={isSubmitting}
+              className={`flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm ${
+                theme === 'dark'
+                  ? 'hover:bg-slate-700 text-slate-400'
+                  : 'hover:bg-slate-200 text-slate-600'
+              }`}
+            >
+              <Edit2 className="w-4 h-4" />
+            </button>
+          )}
+          {onDelete && (
+            <button
+              onClick={onDelete}
+              disabled={isSubmitting}
+              className={`flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm ${
+                theme === 'dark'
+                  ? 'hover:bg-red-900/30 text-red-400'
+                  : 'hover:bg-red-100 text-red-600'
+              }`}
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

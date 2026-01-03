@@ -10,6 +10,7 @@ import { Reorder } from 'framer-motion';
 import styles from './button64.module.css';
 import type {
   FeedbackModule,
+  FeedbackQuestion,
   FeedbackElement,
 } from '@/types/feedback';
 
@@ -18,22 +19,25 @@ export const dynamic = 'force-dynamic';
 const sortElements = (elements: FeedbackElement[] = []) =>
   [...elements].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 
+const sortQuestions = (questions: FeedbackQuestion[] = []) =>
+  [...questions].sort((a, b) => (a.position ?? 0) - (b.position ?? 0)).map(question => ({
+    ...question,
+    elements: sortElements(question.elements ?? []),
+  }));
+
 const normalizeModules = (modules: FeedbackModule[] = []): FeedbackModule[] =>
   [...modules]
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
     .map(module => ({
       ...module,
-      elements: sortElements(module.elements ?? []),
+      questions: sortQuestions(module.questions ?? []),
     }));
-
-const applyElementOrder = (elements: FeedbackElement[]) =>
-  elements.map((element, index) => ({ ...element, position: index + 1 }));
 
 const applyModuleOrder = (modules: FeedbackModule[]) =>
   modules.map((module, index) => ({
     ...module,
     position: index + 1,
-    elements: sortElements(module.elements),
+    questions: sortQuestions(module.questions),
   }));
 
 export default function Comments() {
@@ -88,25 +92,38 @@ export default function Comments() {
 
   const isFiltering = searchQuery.trim().length > 0;
 
-  // Filter modules and elements based on search
+  // Filter modules, questions, and elements based on search
   const filteredModules = searchQuery
     ? modules
         .map(module => ({
           ...module,
-          elements: module.elements.filter((element: FeedbackElement) =>
-            element.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            module.title.toLowerCase().includes(searchQuery.toLowerCase())
-          ),
+          questions: module.questions
+            .map(question => ({
+              ...question,
+              elements: question.elements.filter((element: FeedbackElement) =>
+                element.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                question.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                module.title.toLowerCase().includes(searchQuery.toLowerCase())
+              ),
+            }))
+            .filter(question => 
+              question.elements.length > 0 || 
+              question.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              module.title.toLowerCase().includes(searchQuery.toLowerCase())
+            ),
         }))
-        .filter(module => module.elements.length > 0 || module.title.toLowerCase().includes(searchQuery.toLowerCase()))
+        .filter(module => 
+          module.questions.length > 0 || 
+          module.title.toLowerCase().includes(searchQuery.toLowerCase())
+        )
     : modules;
 
-  const updateModuleElements = useCallback(
-    (moduleId: string, updater: (elements: FeedbackElement[]) => FeedbackElement[]) => {
+  const updateModuleQuestions = useCallback(
+    (moduleId: string, updater: (questions: FeedbackQuestion[]) => FeedbackQuestion[]) => {
       setModules(prev =>
         prev.map(module =>
           module.id === moduleId
-            ? { ...module, elements: updater(module.elements) }
+            ? { ...module, questions: updater(module.questions) }
             : module
         )
       );
@@ -114,35 +131,24 @@ export default function Comments() {
     []
   );
 
-  const handleElementsReorder = useCallback(
-    (moduleId: string, updated: FeedbackElement[]) => {
-      updateModuleElements(moduleId, () =>
-        applyElementOrder(updated)
+  const updateQuestionElements = useCallback(
+    (moduleId: string, questionId: string, updater: (elements: FeedbackElement[]) => FeedbackElement[]) => {
+      setModules(prev =>
+        prev.map(module =>
+          module.id === moduleId
+            ? {
+                ...module,
+                questions: module.questions.map(question =>
+                  question.id === questionId
+                    ? { ...question, elements: updater(question.elements) }
+                    : question
+                ),
+              }
+            : module
+        )
       );
-      setModuleOrderDirty(true);
     },
-    [updateModuleElements]
-  );
-
-  const persistElementOrder = useCallback(
-    async (moduleId: string) => {
-      if (!canManage) return;
-      const module = modules.find(m => m.id === moduleId);
-      if (!module || module.elements.length === 0) return;
-      try {
-        await fetch('/api/feedback/elements/reorder', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            moduleId: moduleId,
-            orderedIds: module.elements.map((element: FeedbackElement) => element.id),
-          }),
-        });
-      } catch (error) {
-        console.error('Failed to persist element order', error);
-      }
-    },
-    [canManage, modules]
+    []
   );
 
   const persistModuleOrder = useCallback(async () => {
@@ -162,12 +168,77 @@ export default function Comments() {
     }
   }, [canManage, moduleOrderDirty, modules]);
 
-  const handleAddElement = useCallback(
-    async (moduleId: string, content: string) => {
+  const handleAddQuestion = useCallback(
+    async (moduleId: string, title: string) => {
       if (!canManage) {
         throw new Error('Not authorized');
       }
-      const response = await fetch(`/api/feedback/${moduleId}/elements`, {
+      const response = await fetch(`/api/feedback/${moduleId}/questions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Unable to add question');
+      }
+      updateModuleQuestions(moduleId, questions =>
+        sortQuestions([...questions, data.question as FeedbackQuestion])
+      );
+    },
+    [canManage, updateModuleQuestions]
+  );
+
+  const handleUpdateQuestion = useCallback(
+    async (moduleId: string, questionId: string, title: string) => {
+      if (!canManage) {
+        throw new Error('Not authorized');
+      }
+      const response = await fetch(`/api/feedback/${moduleId}/questions/${questionId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Unable to update question');
+      }
+      updateModuleQuestions(moduleId, questions =>
+        questions.map(question =>
+          question.id === questionId
+            ? { ...question, title: data.question.title }
+            : question
+        )
+      );
+    },
+    [canManage, updateModuleQuestions]
+  );
+
+  const handleDeleteQuestion = useCallback(
+    async (moduleId: string, questionId: string) => {
+      if (!canManage) {
+        throw new Error('Not authorized');
+      }
+      const response = await fetch(`/api/feedback/${moduleId}/questions/${questionId}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Unable to delete question');
+      }
+      updateModuleQuestions(moduleId, questions =>
+        questions.filter(question => question.id !== questionId)
+      );
+    },
+    [canManage, updateModuleQuestions]
+  );
+
+  const handleAddElement = useCallback(
+    async (moduleId: string, questionId: string, content: string) => {
+      if (!canManage) {
+        throw new Error('Not authorized');
+      }
+      const response = await fetch(`/api/feedback/${moduleId}/questions/${questionId}/elements`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content }),
@@ -176,20 +247,20 @@ export default function Comments() {
       if (!response.ok || !data.success) {
         throw new Error(data.message || 'Unable to add element');
       }
-      updateModuleElements(moduleId, elements =>
+      updateQuestionElements(moduleId, questionId, elements =>
         sortElements([...elements, data.element as FeedbackElement])
       );
     },
-    [canManage, updateModuleElements]
+    [canManage, updateQuestionElements]
   );
 
   const handleUpdateElement = useCallback(
-    async (moduleId: string, elementId: string, content: string) => {
+    async (moduleId: string, questionId: string, elementId: string, content: string) => {
       if (!canManage) {
         throw new Error('Not authorized');
       }
-      const response = await fetch(`/api/feedback/${moduleId}/elements/${elementId}`, {
-        method: 'PATCH',
+      const response = await fetch(`/api/feedback/${moduleId}/questions/${questionId}/elements/${elementId}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content }),
       });
@@ -197,7 +268,7 @@ export default function Comments() {
       if (!response.ok || !data.success) {
         throw new Error(data.message || 'Unable to update element');
       }
-      updateModuleElements(moduleId, elements =>
+      updateQuestionElements(moduleId, questionId, elements =>
         sortElements(
           elements.map(element =>
             element.id === elementId
@@ -207,26 +278,26 @@ export default function Comments() {
         )
       );
     },
-    [canManage, updateModuleElements]
+    [canManage, updateQuestionElements]
   );
 
   const handleDeleteElement = useCallback(
-    async (moduleId: string, elementId: string) => {
+    async (moduleId: string, questionId: string, elementId: string) => {
       if (!canManage) {
         throw new Error('Not authorized');
       }
-      const response = await fetch(`/api/feedback/${moduleId}/elements/${elementId}`, {
+      const response = await fetch(`/api/feedback/${moduleId}/questions/${questionId}/elements/${elementId}`, {
         method: 'DELETE',
       });
       const data = await response.json();
       if (!response.ok || !data.success) {
         throw new Error(data.message || 'Unable to delete element');
       }
-      updateModuleElements(moduleId, elements =>
+      updateQuestionElements(moduleId, questionId, elements =>
         elements.filter(element => element.id !== elementId)
       );
     },
-    [canManage, updateModuleElements]
+    [canManage, updateQuestionElements]
   );
 
   const handleUpdateModule = useCallback(
@@ -290,16 +361,16 @@ export default function Comments() {
     [canManage]
   );
 
-  const handleSectionEditStart = useCallback((moduleId: string) => {
-    setEditingModuleId(moduleId);
+  const handleSectionEditStart = useCallback((_moduleId: string) => {
+    setEditingModuleId(_moduleId);
   }, []);
 
   const handleSectionEditStop = useCallback(
-    async (moduleId: string) => {
+    async (_moduleId: string) => {
       setEditingModuleId(null);
-      await persistElementOrder(moduleId);
+      // No longer needed since questions don't have reordering
     },
-    [persistElementOrder]
+    []
   );
 
   const handleGlobalEditToggle = useCallback(async () => {
@@ -577,17 +648,21 @@ export default function Comments() {
                 <FeedbackSection
                   id={module.id}
                   title={module.title}
-                  elements={module.elements}
+                  questions={module.questions}
                   defaultOpen={isFiltering || index === 0}
-                  onElementsReorder={(updated: FeedbackElement[]) =>
-                    handleElementsReorder(module.id, updated)
-                  }
+                  forceOpen={isFiltering}
+                  onQuestionsReorder={(updated: FeedbackQuestion[]) => {
+                    // Handle question reordering if needed
+                  }}
                   isEditing={true}
                   onStartEditing={handleSectionEditStart}
                   onStopEditing={handleSectionEditStop}
                   editingDisabled={false}
                   canManage={true}
                   isReorderMode={true}
+                  onAddQuestion={handleAddQuestion}
+                  onUpdateQuestion={handleUpdateQuestion}
+                  onDeleteQuestion={handleDeleteQuestion}
                   onAddElement={handleAddElement}
                   onUpdateElement={handleUpdateElement}
                   onDeleteElement={handleDeleteElement}
@@ -605,16 +680,20 @@ export default function Comments() {
                 key={module.id}
                 id={module.id}
                 title={module.title}
-                elements={module.elements}
+                questions={module.questions}
                 defaultOpen={isFiltering || index === 0}
-                onElementsReorder={(updated: FeedbackElement[]) =>
-                  handleElementsReorder(module.id, updated)
-                }
+                forceOpen={isFiltering}
+                onQuestionsReorder={(updated: FeedbackQuestion[]) => {
+                  // Handle question reordering if needed
+                }}
                 isEditing={isSectionEditing}
                 onStartEditing={handleSectionEditStart}
                 onStopEditing={handleSectionEditStop}
                 editingDisabled={isGlobalEditing || (editingModuleId !== null && !isSectionEditing)}
                 canManage={true}
+                onAddQuestion={handleAddQuestion}
+                onUpdateQuestion={handleUpdateQuestion}
+                onDeleteQuestion={handleDeleteQuestion}
                 onAddElement={handleAddElement}
                 onUpdateElement={handleUpdateElement}
                 onDeleteElement={handleDeleteElement}
@@ -629,14 +708,18 @@ export default function Comments() {
               key={module.id}
               id={module.id}
               title={module.title}
-              elements={module.elements}
+              questions={module.questions}
               defaultOpen={isFiltering || index === 0}
-              onElementsReorder={undefined}
+              forceOpen={isFiltering}
+              onQuestionsReorder={undefined}
               isEditing={false}
               onStartEditing={undefined}
               onStopEditing={undefined}
               editingDisabled={true}
               canManage={false}
+              onAddQuestion={undefined}
+              onUpdateQuestion={undefined}
+              onDeleteQuestion={undefined}
               onAddElement={undefined}
               onUpdateElement={undefined}
               onDeleteElement={undefined}
