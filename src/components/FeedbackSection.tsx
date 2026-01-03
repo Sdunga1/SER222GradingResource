@@ -1,0 +1,806 @@
+'use client';
+
+import React, { useEffect, useState } from 'react';
+import {
+  ChevronDown,
+  Plus,
+  Check,
+  GripVertical,
+  Copy,
+  Trash2,
+  Edit2,
+} from 'lucide-react';
+import { ChevronsUpDown } from './icons/ChevronsUpDown';
+import { Reorder } from 'framer-motion';
+import { useTheme } from '../contexts/ThemeContext';
+import { toast } from 'sonner';
+import type { FeedbackElement } from '@/types/feedback';
+
+type FeedbackSectionProps = {
+  id: string;
+  title: string;
+  elements: FeedbackElement[];
+  defaultOpen?: boolean;
+  onElementsReorder?: (updatedElements: FeedbackElement[]) => void;
+  isEditing?: boolean;
+  onStartEditing?: (sectionId: string) => void;
+  onStopEditing?: (sectionId: string) => void;
+  editingDisabled?: boolean;
+  canManage?: boolean;
+  isReorderMode?: boolean;
+  onAddElement?: (moduleId: string, content: string) => Promise<void>;
+  onUpdateElement?: (moduleId: string, elementId: string, content: string) => Promise<void>;
+  onDeleteElement?: (moduleId: string, elementId: string) => Promise<void>;
+  onUpdateModule?: (moduleId: string, newTitle: string) => void;
+  onDeleteModule?: (moduleId: string) => Promise<void>;
+} & Omit<React.ComponentProps<'div'>, 'children'>;
+
+export function FeedbackSection({
+  id: sectionId,
+  title,
+  elements,
+  defaultOpen = false,
+  onElementsReorder,
+  isEditing = false,
+  onStartEditing,
+  onStopEditing,
+  editingDisabled = false,
+  canManage = false,
+  isReorderMode = false,
+  onAddElement,
+  onUpdateElement,
+  onDeleteElement,
+  onUpdateModule,
+  onDeleteModule,
+  ...props
+}: FeedbackSectionProps) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const [localElements, setLocalElements] = useState(elements);
+  const [copiedId, setCopiedId] = useState<string | null>(() => {
+    // Load saved copiedId from localStorage
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('lastCopiedCommentId');
+    }
+    return null;
+  });
+  const [wasCopiedAgain, setWasCopiedAgain] = useState(false);
+  const [activeForm, setActiveForm] = useState<{
+    mode: 'create' | 'edit';
+    element?: FeedbackElement;
+  } | null>(null);
+  const [formContent, setFormContent] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [moduleTitle, setModuleTitle] = useState(title);
+  const [isSavingTitle, setIsSavingTitle] = useState(false);
+  const { theme } = useTheme();
+
+  useEffect(() => {
+    setLocalElements(elements);
+  }, [elements]);
+
+  useEffect(() => {
+    if (!isEditing) {
+      setActiveForm(null);
+    }
+  }, [isEditing]);
+
+  useEffect(() => {
+    setModuleTitle(title);
+  }, [title]);
+
+  const totalCount = localElements.length;
+
+  const baseActionButtonClasses =
+    'inline-flex items-center justify-center rounded-2xl p-2.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed';
+  const addButtonClasses =
+    theme === 'dark'
+      ? `${baseActionButtonClasses} text-white border border-purple-500/40 bg-gradient-to-br from-purple-500/20 to-violet-600/20 hover:from-purple-500/30 hover:to-violet-600/30 shadow-lg shadow-purple-500/20 hover:shadow-purple-500/30`
+      : `${baseActionButtonClasses} text-white border border-purple-500/40 bg-gradient-to-br from-purple-500 to-violet-600 hover:from-purple-600 hover:to-violet-700 shadow-lg shadow-purple-500/30 hover:shadow-purple-500/40`;
+  const editButtonClasses =
+    theme === 'dark'
+      ? `${baseActionButtonClasses} text-white/80 bg-white/6 border border-white/10 hover:text-white`
+      : `${baseActionButtonClasses} text-slate-800 bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-50`;
+
+  const effectiveEditing = canManage && isEditing;
+
+  const handleReorder = (updated: FeedbackElement[]) => {
+    setLocalElements(updated);
+    onElementsReorder?.(updated);
+  };
+
+  const handleEditToggle = () => {
+    if (!canManage) return;
+    if (effectiveEditing) {
+      onStopEditing?.(sectionId);
+    } else if (!editingDisabled) {
+      onStartEditing?.(sectionId);
+    }
+  };
+
+  const handleCopy = async (content: string, elementId: string) => {
+    try {
+      const wasAlreadyCopied = copiedId === elementId;
+      
+      await navigator.clipboard.writeText(content);
+      setCopiedId(elementId);
+      
+      // Save to localStorage for persistence
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('lastCopiedCommentId', elementId);
+      }
+      
+      // Show "Already Copied!" if clicking the same comment again
+      if (wasAlreadyCopied) {
+        setWasCopiedAgain(true);
+        toast.success('Already Copied!');
+      } else {
+        setWasCopiedAgain(false);
+        toast.success('Comment copied!');
+      }
+    } catch (error) {
+      console.error('Failed to copy:', error);
+      toast.error('Failed to copy');
+    }
+  };
+
+  const handleAddElement = async () => {
+    if (!formContent.trim()) {
+      toast.error('Comment cannot be empty');
+      return;
+    }
+    if (!onAddElement) {
+      toast.error('Unable to add comment');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await onAddElement(sectionId, formContent.trim());
+      setFormContent('');
+      setActiveForm(null);
+      toast.success('Comment added!');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to add comment');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleUpdateElement = async () => {
+    if (!formContent.trim()) {
+      toast.error('Comment cannot be empty');
+      return;
+    }
+    if (!onUpdateElement || !activeForm?.element) {
+      toast.error('Unable to update comment');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await onUpdateElement(sectionId, activeForm.element.id, formContent.trim());
+      setFormContent('');
+      setActiveForm(null);
+      toast.success('Comment updated!');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update comment');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteElement = async (elementId: string) => {
+    if (!onDeleteElement) {
+      toast.error('Unable to delete comment');
+      return;
+    }
+    if (!window.confirm('Are you sure you want to delete this comment?')) return;
+    setIsSubmitting(true);
+    try {
+      await onDeleteElement(sectionId, elementId);
+      toast.success('Comment deleted!');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete comment');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSaveModuleTitle = async () => {
+    if (!moduleTitle.trim()) {
+      toast.error('Module name cannot be empty');
+      return;
+    }
+    setIsSavingTitle(true);
+    try {
+      const response = await fetch(`/api/feedback/${sectionId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: moduleTitle.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to update module');
+      }
+
+      setIsEditingTitle(false);
+      onUpdateModule?.(sectionId, moduleTitle.trim());
+      toast.success('Module name updated!');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update module name');
+      setModuleTitle(title); // Revert on error
+    } finally {
+      setIsSavingTitle(false);
+    }
+  };
+
+  const handleCancelModuleEdit = () => {
+    setModuleTitle(title);
+    setIsEditingTitle(false);
+  };
+
+  const handleModuleTitleKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>
+  ) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSaveModuleTitle();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      handleCancelModuleEdit();
+    }
+  };
+
+  const editingBanner =
+    isEditing &&
+    'border border-purple-500/50 bg-purple-500/5 shadow-inner shadow-purple-500/10';
+
+  return (
+    <div
+      id={sectionId}
+      className={`rounded-2xl border overflow-hidden ${
+        theme === 'dark'
+          ? 'bg-gradient-to-br from-[#050505] to-[#1f0139] border-purple-900/30'
+          : 'bg-gradient-to-br from-slate-50 to-slate-100 border-purple-200'
+      } ${isEditing ? 'ring-2 ring-purple-500/60' : ''}`}
+      {...props}
+    >
+      {/* Section Header */}
+      {isEditingTitle ? (
+        <div
+          className={`w-full px-6 py-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between transition-colors ${
+            theme === 'dark' ? 'hover:bg-slate-800/50' : 'hover:bg-slate-100/50'
+          } ${editingBanner ?? ''}`}
+        >
+          <div className="flex items-center gap-4 flex-1">
+            {isReorderMode && (
+              <GripVertical
+                className={`w-5 h-5 flex-shrink-0 ${
+                  theme === 'dark' ? 'text-slate-400' : 'text-slate-500'
+                } cursor-grab active:cursor-grabbing`}
+              />
+            )}
+            <ChevronDown
+              className={`w-5 h-5 transition-transform ${
+                theme === 'dark' ? 'text-slate-400' : 'text-slate-600'
+              } opacity-50`}
+            />
+            <div className="text-left flex-1">
+              <div className="flex items-center gap-2 mb-2">
+                <input
+                  type="text"
+                  value={moduleTitle}
+                  onChange={e => setModuleTitle(e.target.value)}
+                  onKeyDown={handleModuleTitleKeyDown}
+                  placeholder="Enter module name..."
+                  autoFocus
+                  disabled={isSavingTitle}
+                  className={`h-9 px-3 rounded ${
+                    theme === 'dark'
+                      ? 'bg-slate-800 border-slate-700 text-slate-100'
+                      : 'bg-white border-slate-300 text-slate-900'
+                  } border focus:outline-none focus:ring-2 focus:ring-purple-500`}
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveModuleTitle}
+                  disabled={isSavingTitle || !moduleTitle.trim()}
+                  className={`p-2 rounded-lg transition-colors flex-shrink-0 ${
+                    theme === 'dark'
+                      ? 'bg-green-600 hover:bg-green-700 text-white disabled:bg-slate-700 disabled:text-slate-500'
+                      : 'bg-green-500 hover:bg-green-600 text-white disabled:bg-slate-300 disabled:text-slate-500'
+                  }`}
+                >
+                  <Check className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelModuleEdit}
+                  disabled={isSavingTitle}
+                  className={`p-2 rounded-lg transition-colors flex-shrink-0 ${
+                    theme === 'dark'
+                      ? 'bg-slate-700 hover:bg-slate-600 text-white'
+                      : 'bg-slate-200 hover:bg-slate-300 text-slate-900'
+                  }`}
+                >
+                  ✕
+                </button>
+              </div>
+              <p className={theme === 'dark' ? 'text-slate-500' : 'text-slate-600'}>
+                {localElements.length} Comments
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div
+          onClick={() => setIsOpen(!isOpen)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setIsOpen(!isOpen);
+            }
+          }}
+          role="button"
+          tabIndex={0}
+          className={`w-full px-6 py-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between transition-colors cursor-pointer ${
+            theme === 'dark' ? 'hover:bg-slate-800/50' : 'hover:bg-slate-100/50'
+          } ${editingBanner ?? ''}`}
+        >
+          <div className="flex items-center gap-4 flex-1">
+            {isReorderMode && (
+              <GripVertical
+                className={`w-5 h-5 flex-shrink-0 ${
+                  theme === 'dark' ? 'text-slate-400' : 'text-slate-500'
+                } cursor-grab active:cursor-grabbing`}
+              />
+            )}
+            <ChevronDown
+              className={`w-5 h-5 transition-transform ${
+                theme === 'dark' ? 'text-slate-400' : 'text-slate-600'
+              } ${isOpen ? 'rotate-0' : '-rotate-90'}`}
+            />
+            <div className="text-left flex-1">
+              <div className="flex items-center gap-2">
+                <h3
+                  className={
+                    theme === 'dark' ? 'text-slate-100' : 'text-slate-900'
+                  }
+                >
+                  {moduleTitle}
+                </h3>
+                {canManage && (
+                  <button
+                    type="button"
+                    onClick={e => {
+                      e.stopPropagation();
+                      setIsEditingTitle(true);
+                    }}
+                    className={`p-1 rounded transition-colors ${
+                      theme === 'dark'
+                        ? 'hover:bg-slate-700 text-slate-400 hover:text-slate-200'
+                        : 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Edit2 className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+              <p className={theme === 'dark' ? 'text-slate-500' : 'text-slate-600'}>
+                {localElements.length} Comments
+              </p>
+              {effectiveEditing && (
+                <p className="mt-1 text-xs font-semibold text-purple-300">
+                  Drag to reorder comments
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+            {canManage && (
+              <>
+                <button
+                  type="button"
+                  className={addButtonClasses}
+                  aria-label={`Add comment to ${moduleTitle}`}
+                  disabled={editingDisabled && !effectiveEditing}
+                  onClick={e => {
+                    e.stopPropagation();
+                    if (editingDisabled && !effectiveEditing) return;
+                    if (!effectiveEditing) {
+                      onStartEditing?.(sectionId);
+                    }
+                    setActiveForm({ mode: 'create' });
+                    setFormContent('');
+                  }}
+                >
+                  <Plus className="w-4 h-4" />
+                  <span className="sr-only">Add comment</span>
+                </button>
+                <button
+                  type="button"
+                  className={editButtonClasses}
+                  aria-label={`Reorder comments in ${moduleTitle}`}
+                  onClick={e => {
+                    e.stopPropagation();
+                    if (!isOpen) {
+                      setIsOpen(true);
+                    }
+                    handleEditToggle();
+                  }}
+                  disabled={editingDisabled && !effectiveEditing}
+                >
+                  {effectiveEditing ? (
+                    <>
+                      <Check className="w-4 h-4 text-emerald-400" />
+                      <span className="sr-only">Done editing</span>
+                    </>
+                  ) : (
+                    <>
+                      <ChevronsUpDown width={16} height={16} stroke="#fbbf24" />
+                      <span className="sr-only">Reorder comments</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className={`${baseActionButtonClasses} ${theme === 'dark' ? 'text-red-400 bg-red-500/10 border border-red-500/30 hover:bg-red-500/20' : 'text-red-600 bg-red-50 border border-red-200 hover:bg-red-100'}`}
+                  aria-label={`Delete ${moduleTitle}`}
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (window.confirm(`Are you sure you want to delete the module "${moduleTitle}"? This will also delete all comments in this module.`)) {
+                      await onDeleteModule?.(sectionId);
+                    }
+                  }}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span className="sr-only">Delete module</span>
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Elements List */}
+      {isOpen && (
+        <div
+          className={`border-t ${
+            theme === 'dark' ? 'border-slate-800' : 'border-slate-200'
+          }`}
+        >
+          {/* Table Header */}
+          <div
+            className={`hidden md:grid md:grid-cols-12 gap-4 px-6 py-2 text-[11px] font-medium tracking-wide uppercase ${
+              theme === 'dark'
+                ? 'bg-[#050716] text-slate-300'
+                : 'bg-slate-100/80 text-slate-700'
+            }`}
+          >
+            <div className="col-span-10">
+              <span>Comment</span>
+            </div>
+            {canManage && (
+              <div className="col-span-2 flex items-center justify-center gap-1">
+                <span>Actions</span>
+              </div>
+            )}
+            {!canManage && (
+              <div className="col-span-2 flex flex-col items-center justify-center">
+                <span className="text-[11px] font-medium tracking-wide uppercase">Copy</span>
+                <span className={`text-[9px] font-normal normal-case mt-0.5 ${
+                  theme === 'dark' ? 'text-slate-500' : 'text-slate-500'
+                }`}>
+                  Click anywhere
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Edit Form - Show when activeForm is set */}
+          {activeForm && canManage && (
+            <div
+              className={`p-4 mx-4 mt-4 rounded-lg border ${
+                theme === 'dark'
+                  ? 'bg-slate-800 border-slate-700'
+                  : 'bg-slate-50 border-slate-200'
+              }`}
+            >
+              <textarea
+                value={formContent}
+                onChange={(e) => setFormContent(e.target.value)}
+                placeholder="Enter feedback comment..."
+                disabled={isSubmitting}
+                className={`w-full p-3 rounded border text-sm ${
+                  theme === 'dark'
+                    ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400'
+                    : 'bg-white border-slate-300 text-slate-900 placeholder-slate-500'
+                } focus:outline-none focus:ring-2 focus:ring-purple-500`}
+                rows={4}
+              />
+              <div className="flex gap-2 mt-3">
+                <button
+                  type="button"
+                  onClick={
+                    activeForm.mode === 'create'
+                      ? handleAddElement
+                      : handleUpdateElement
+                  }
+                  disabled={isSubmitting || !formContent.trim()}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? 'Saving...' : activeForm.mode === 'create' ? 'Add' : 'Update'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveForm(null);
+                    setFormContent('');
+                  }}
+                  disabled={isSubmitting}
+                  className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Elements Rows */}
+          {effectiveEditing ? (
+            <div className="space-y-4 p-4">
+              <Reorder.Group
+                axis="y"
+                values={localElements}
+                onReorder={handleReorder}
+                className="divide-y divide-transparent space-y-3"
+              >
+                {localElements.map(element => (
+                  <Reorder.Item
+                    key={element.id}
+                    value={element}
+                    className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/40"
+                    whileDrag={{ scale: 1.01 }}
+                  >
+                    <FeedbackElementRow
+                      element={element}
+                      isEditing={true}
+                      theme={theme}
+                      onCopy={handleCopy}
+                      copiedId={copiedId}
+                      wasCopiedAgain={wasCopiedAgain}
+                      canManage={canManage}
+                      onEdit={() => {
+                        setActiveForm({ mode: 'edit', element });
+                        setFormContent(element.content);
+                      }}
+                      onDelete={() => handleDeleteElement(element.id)}
+                      isSubmitting={isSubmitting}
+                    />
+                  </Reorder.Item>
+                ))}
+              </Reorder.Group>
+            </div>
+          ) : (
+            <div
+              className={`divide-y ${
+                theme === 'dark' ? 'divide-slate-800' : 'divide-slate-200'
+              }`}
+            >
+              {localElements.length === 0 ? (
+                <div className={`px-6 py-8 text-center ${
+                  theme === 'dark' ? 'text-slate-400' : 'text-slate-600'
+                }`}>
+                  <p className="text-sm italic">No comments in this module</p>
+                </div>
+              ) : (
+                localElements.map(element => (
+                  <FeedbackElementRow
+                    key={element.id}
+                    element={element}
+                    isEditing={false}
+                    theme={theme}
+                    onCopy={handleCopy}
+                    copiedId={copiedId}
+                    wasCopiedAgain={wasCopiedAgain}
+                    canManage={canManage}
+                    onEdit={
+                      canManage
+                        ? () => {
+                            setActiveForm({ mode: 'edit', element });
+                            setFormContent(element.content);
+                          }
+                        : undefined
+                    }
+                    onDelete={canManage ? () => handleDeleteElement(element.id) : undefined}
+                    isSubmitting={isSubmitting}
+                  />
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface FeedbackElementRowProps {
+  element: FeedbackElement;
+  isEditing: boolean;
+  theme: string;
+  onCopy: (content: string, elementId: string) => void;
+  copiedId: string | null;
+  wasCopiedAgain: boolean;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  isSubmitting?: boolean;
+  canManage?: boolean;
+}
+
+function FeedbackElementRow({
+  element,
+  isEditing,
+  theme,
+  onCopy,
+  copiedId,
+  wasCopiedAgain,
+  onEdit,
+  onDelete,
+  isSubmitting,
+  canManage,
+}: FeedbackElementRowProps) {
+  const handleRowClick = () => {
+    // In grader mode (when canManage is false), clicking anywhere copies
+    if (!canManage) {
+      onCopy(element.content, element.id);
+    }
+  };
+
+  return (
+    <div
+      className={`group transition-colors relative border-l-4 ${
+        !canManage && copiedId === element.id
+          ? 'border-l-green-500 bg-green-500/10'
+          : 'border-l-transparent'
+      } ${
+        theme === 'dark' ? 'hover:bg-slate-800/50' : 'hover:bg-slate-100/50'
+      } ${isEditing ? 'ring-2 ring-purple-500/40 bg-purple-500/5' : ''} ${
+        !canManage ? 'cursor-pointer' : ''
+      }`}
+      style={{ cursor: isEditing ? 'grab' : !canManage ? 'pointer' : 'default' }}
+      onClick={!canManage ? handleRowClick : undefined}
+    >
+      {/* Copied Indicator - Only show in GRADER mode */}
+      {!canManage && copiedId === element.id && (
+        <div className={`absolute top-2 right-2 ${
+          wasCopiedAgain ? 'bg-blue-600' : 'bg-green-600'
+        } text-white px-3 py-1 rounded-full text-xs font-semibold shadow-lg z-10`}>
+          <span className="inline-block animate-pulse">
+            {wasCopiedAgain ? 'Already Copied!' : 'Copied!'}
+          </span>
+        </div>
+      )}
+      
+      {/* Desktop Layout */}
+      <div className="hidden md:grid md:grid-cols-12 gap-4 px-6 py-4 items-start">
+        {/* Comment Content */}
+        <div className="col-span-10">
+          <p
+            className={`text-sm whitespace-pre-wrap ${
+              theme === 'dark' ? 'text-slate-300' : 'text-slate-700'
+            }`}
+          >
+            {element.content}
+          </p>
+        </div>
+
+        {/* Actions */}
+        <div className="col-span-2 flex items-center justify-center gap-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation(); // Prevent row click
+              onCopy(element.content, element.id);
+            }}
+            className={`p-2 rounded transition-colors ${
+              copiedId === element.id
+                ? 'bg-green-600 text-white'
+                : theme === 'dark'
+                ? `bg-slate-700 text-slate-300 hover:bg-slate-600 ${canManage ? 'opacity-0 group-hover:opacity-100' : ''}`
+                : `bg-slate-200 text-slate-700 hover:bg-slate-300 ${canManage ? 'opacity-0 group-hover:opacity-100' : ''}`
+            }`}
+            aria-label="Copy comment"
+          >
+            <Copy className="w-4 h-4" />
+          </button>
+          {canManage && onEdit && (
+            <>
+              <button
+                onClick={onEdit}
+                disabled={isSubmitting}
+                className={`p-2 rounded transition-colors ${
+                  theme === 'dark'
+                    ? 'hover:bg-slate-700 text-slate-400'
+                    : 'hover:bg-slate-200 text-slate-600'
+                }`}
+                aria-label="Edit"
+              >
+                <Edit2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={onDelete}
+                disabled={isSubmitting}
+                className={`p-2 rounded transition-colors ${
+                  theme === 'dark'
+                    ? 'hover:bg-red-900/30 text-red-400'
+                    : 'hover:bg-red-100 text-red-600'
+                }`}
+                aria-label="Delete"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Mobile Layout */}
+      <div className="md:hidden p-4 space-y-3">
+        <p
+          className={`text-sm whitespace-pre-wrap ${
+            theme === 'dark' ? 'text-slate-300' : 'text-slate-700'
+          }`}
+        >
+          {element.content}
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation(); // Prevent row click
+              onCopy(element.content, element.id);
+            }}
+            className={`flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm ${
+              copiedId === element.id
+                ? 'bg-green-600 text-white'
+                : theme === 'dark'
+                ? 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+            }`}
+          >
+            <Copy className="w-4 h-4" />
+            {copiedId === element.id ? 'Copied' : 'Copy'}
+          </button>
+          {onEdit && (
+            <button
+              onClick={onEdit}
+              disabled={isSubmitting}
+              className={`flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm ${
+                theme === 'dark'
+                  ? 'hover:bg-slate-700 text-slate-400'
+                  : 'hover:bg-slate-200 text-slate-600'
+              }`}
+            >
+              <Edit2 className="w-4 h-4" />
+            </button>
+          )}
+          {onDelete && (
+            <button
+              onClick={onDelete}
+              disabled={isSubmitting}
+              className={`flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm ${
+                theme === 'dark'
+                  ? 'hover:bg-red-900/30 text-red-400'
+                  : 'hover:bg-red-100 text-red-600'
+              }`}
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
