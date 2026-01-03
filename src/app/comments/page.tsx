@@ -578,7 +578,7 @@ export default function Comments() {
                   id={module.id}
                   title={module.title}
                   elements={module.elements}
-                  defaultOpen={index === 0}
+                  defaultOpen={isFiltering || index === 0}
                   onElementsReorder={(updated: FeedbackElement[]) =>
                     handleElementsReorder(module.id, updated)
                   }
@@ -606,7 +606,7 @@ export default function Comments() {
                 id={module.id}
                 title={module.title}
                 elements={module.elements}
-                defaultOpen={index === 0}
+                defaultOpen={isFiltering || index === 0}
                 onElementsReorder={(updated: FeedbackElement[]) =>
                   handleElementsReorder(module.id, updated)
                 }
@@ -630,7 +630,7 @@ export default function Comments() {
               id={module.id}
               title={module.title}
               elements={module.elements}
-              defaultOpen={index === 0}
+              defaultOpen={isFiltering || index === 0}
               onElementsReorder={undefined}
               isEditing={false}
               onStartEditing={undefined}

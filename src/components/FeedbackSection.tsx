@@ -89,6 +89,10 @@ export function FeedbackSection({
     setModuleTitle(title);
   }, [title]);
 
+  useEffect(() => {
+    setIsOpen(defaultOpen);
+  }, [defaultOpen]);
+
   const totalCount = localElements.length;
 
   const baseActionButtonClasses =
