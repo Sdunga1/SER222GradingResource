@@ -219,8 +219,8 @@ export function FeedbackSection({
                   className={`h-9 px-3 rounded ${
                     theme === 'dark'
                       ? 'bg-slate-800 border-slate-700 text-slate-100'
-                      : 'bg-white border-slate-300 text-slate-900'
-                  } border focus:outline-none focus:ring-2 focus:ring-purple-500`}
+                      : 'bg-white border-[#8C1D40]/30 text-slate-900'
+                  } border focus:outline-none focus:ring-2 ${theme === 'dark' ? 'focus:ring-purple-500' : 'focus:ring-[#FFC627]'}`}
                 />
                 <button
                   type="button"
@@ -411,8 +411,8 @@ export function FeedbackSection({
                 className={`w-full p-3 rounded border text-sm ${
                   theme === 'dark'
                     ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400'
-                    : 'bg-white border-slate-300 text-slate-900 placeholder-slate-500'
-                } focus:outline-none focus:ring-2 focus:ring-purple-500`}
+                    : 'bg-white border-[#FFC627]/50 text-slate-900 placeholder-[#8C1D40]/50'
+                } focus:outline-none focus:ring-2 ${theme === 'dark' ? 'focus:ring-purple-500' : 'focus:ring-[#FFC627]'}`}
               />
               <div className="flex gap-2 mt-3">
                 <button

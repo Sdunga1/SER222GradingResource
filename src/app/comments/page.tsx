@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { Search } from 'lucide-react';
+import { Search, Sun, Moon } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useTheme } from '@/contexts/ThemeContext';
 import { FeedbackSection } from '@/components/FeedbackSection';
@@ -58,7 +58,7 @@ export default function Comments() {
   const [moduleOrderDirty, setModuleOrderDirty] = useState(false);
   const [isAddingModule, setIsAddingModule] = useState(false);
   const [newModuleTitle, setNewModuleTitle] = useState('');
-  const { theme } = useTheme();
+  const { theme, toggleTheme } = useTheme();
   const canManage = true;
 
   // Save mode to localStorage whenever it changes
@@ -408,15 +408,19 @@ export default function Comments() {
   if (error) {
     return (
       <div className={`flex items-center justify-center min-h-screen ${
-        theme === 'dark' ? 'bg-slate-950' : 'bg-white'
+        theme === 'dark' ? 'bg-slate-950' : 'bg-[#8C1D40]'
       }`}>
         <div className="text-center">
-          <p className={`${theme === 'dark' ? 'text-red-400' : 'text-red-600'} mb-4`}>
+          <p className={`${theme === 'dark' ? 'text-red-400' : 'text-white'} mb-4`}>
             {error}
           </p>
           <button
             onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+            className={`px-4 py-2 rounded-lg font-semibold ${
+              theme === 'dark' 
+                ? 'bg-purple-600 text-white hover:bg-purple-700'
+                : 'bg-[#FFC627] text-[#8C1D40] hover:bg-[#FFC627]/90'
+            }`}
           >
             Retry
           </button>
@@ -435,11 +439,11 @@ export default function Comments() {
       <div className={`border-b ${
         theme === 'dark'
           ? 'border-slate-800/40 bg-slate-950'
-          : 'border-slate-200 bg-white'
+          : 'border-[#FFC627]/30 bg-[#8C1D40]/95 backdrop-blur-sm'
       }`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <h1 className="text-3xl font-bold">SER222 Grading Notes</h1>
-          <p className={`${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'} mt-1`}>
+          <h1 className={`text-3xl font-bold ${theme === 'dark' ? '' : 'text-[#FFC627]'}`}>SER222 Grading Notes</h1>
+          <p className={`${theme === 'dark' ? 'text-slate-400' : 'text-[#FFC627]/80'} mt-1`}>
             {modules.length} modules · Manage and share grading feedback
           </p>
         </div>
@@ -449,24 +453,39 @@ export default function Comments() {
       <div className={`sticky top-0 z-40 border-b ${
         theme === 'dark'
           ? 'border-slate-800/40 bg-slate-950/80'
-          : 'border-slate-200 bg-white/80'
+          : 'border-[#FFC627]/30 bg-[#8C1D40]/95'
       } backdrop-blur-sm`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             {/* Search */}
             <div className="relative flex-1 md:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${theme === 'dark' ? 'text-slate-500' : 'text-[#8C1D40]'}`} />
               <Input
                 type="text"
                 placeholder="Search comments..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className={`pl-10 ${theme === 'dark' ? 'bg-slate-900 border-slate-700 text-slate-100 placeholder-slate-500' : 'bg-white border-slate-300 text-slate-900 placeholder-slate-500'}`}
+                className={`pl-10 ${theme === 'dark' ? 'bg-slate-900 border-slate-700 text-slate-100 placeholder-slate-500' : 'bg-white border-[#FFC627]/50 text-slate-900 placeholder-[#8C1D40]/50 focus:border-[#FFC627] focus:ring-[#FFC627]/50'}`}
               />
             </div>
 
             {/* Mode Selector */}
             <div className="flex gap-3 items-center">
+              <button
+                onClick={toggleTheme}
+                className={`p-2.5 rounded-lg transition-all ${
+                  theme === 'dark'
+                    ? 'bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700'
+                    : 'bg-[#FFC627] hover:bg-[#FFC627]/90 text-[#8C1D40] border border-[#FFC627] shadow-lg'
+                }`}
+                aria-label="Toggle theme"
+              >
+                {theme === 'dark' ? (
+                  <Sun className="w-5 h-5" />
+                ) : (
+                  <Moon className="w-5 h-5" />
+                )}
+              </button>
               <button
                 className={styles.button64}
                 role="button"
@@ -539,7 +558,11 @@ export default function Comments() {
               <div className="flex gap-3">
                 <button
                   onClick={() => setIsAddingModule(true)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-neutral-900 font-semibold shadow-sm border border-neutral-200 hover:bg-neutral-100 transition-colors"
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl font-semibold shadow-sm border transition-colors ${
+                    theme === 'dark' 
+                      ? 'bg-white text-neutral-900 border-neutral-200 hover:bg-neutral-100'
+                      : 'bg-[#FFC627] text-[#8C1D40] border-[#FFC627] hover:bg-[#FFC627]/90 shadow-lg'
+                  }`}
                   style={{ minHeight: 38, minWidth: 0, fontSize: '1.02rem' }}
                 >
                   <span style={{fontSize: '1.2em', fontWeight: 700, marginRight: 2}}>+</span> Add Module
@@ -548,8 +571,12 @@ export default function Comments() {
                   onClick={handleGlobalEditToggle}
                   className={`flex items-center gap-2 px-4 py-2 rounded-xl font-semibold shadow-sm border transition-colors ${
                     isGlobalEditing
-                      ? 'bg-green-600 text-white border-green-700 hover:bg-green-700'
-                      : 'bg-black text-white border-neutral-800 hover:bg-neutral-900'
+                      ? theme === 'dark' 
+                        ? 'bg-green-600 text-white border-green-700 hover:bg-green-700'
+                        : 'bg-green-600 text-white border-green-700 hover:bg-green-700 shadow-lg'
+                      : theme === 'dark'
+                      ? 'bg-black text-white border-neutral-800 hover:bg-neutral-900'
+                      : 'bg-white text-[#8C1D40] border-[#FFC627] hover:bg-[#FFC627]/10 shadow-lg'
                   }`}
                   style={{ minHeight: 38, minWidth: 0, fontSize: '1.02rem' }}
                 >
@@ -558,7 +585,7 @@ export default function Comments() {
                       <ChevronsUpDown
                         width={20}
                         height={20}
-                        stroke={'#fff'}
+                        stroke={theme === 'dark' ? '#fff' : '#8C1D40'}
                       />
                       Reorder
                     </>
@@ -566,10 +593,10 @@ export default function Comments() {
                 </button>
               </div>
             ) : (
-              <div className={`p-4 rounded-lg border ${
+              <div className={`p-4 rounded-lg border shadow-lg ${
                 theme === 'dark'
                   ? 'bg-slate-800 border-slate-700'
-                  : 'bg-slate-50 border-slate-200'
+                  : 'bg-white border-[#FFC627] shadow-[#FFC627]/20'
               }`}>
                 <input
                   type="text"
@@ -580,8 +607,8 @@ export default function Comments() {
                   className={`w-full p-2 rounded border ${
                     theme === 'dark'
                       ? 'bg-slate-900 border-slate-600 text-slate-100 placeholder-slate-400'
-                      : 'bg-white border-slate-300 text-slate-900 placeholder-slate-500'
-                  } focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3`}
+                      : 'bg-white border-[#FFC627]/50 text-slate-900 placeholder-slate-500'
+                  } focus:outline-none focus:ring-2 ${theme === 'dark' ? 'focus:ring-blue-500' : 'focus:ring-[#FFC627]'} mb-3`}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       handleAddModule(newModuleTitle);
@@ -594,7 +621,11 @@ export default function Comments() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => handleAddModule(newModuleTitle)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold"
+                    className={`px-4 py-2 text-white rounded-lg font-semibold shadow-md ${
+                      theme === 'dark'
+                        ? 'bg-blue-600 hover:bg-blue-700'
+                        : 'bg-[#FFC627] text-[#8C1D40] hover:bg-[#FFC627]/90'
+                    }`}
                   >
                     Add Module
                   </button>
@@ -606,7 +637,7 @@ export default function Comments() {
                     className={`px-4 py-2 rounded-lg font-semibold ${
                       theme === 'dark'
                         ? 'bg-slate-700 hover:bg-slate-600 text-slate-200'
-                        : 'bg-slate-200 hover:bg-slate-300 text-slate-900'
+                        : 'bg-white hover:bg-[#8C1D40]/10 text-[#8C1D40] border border-[#8C1D40]/30'
                     }`}
                   >
                     Cancel
@@ -619,7 +650,7 @@ export default function Comments() {
 
         {filteredModules.length === 0 && !isFiltering && (
           <div className="text-center py-12">
-            <p className={theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}>
+            <p className={theme === 'dark' ? 'text-slate-400' : 'text-white/80'}>
               No feedback modules yet
             </p>
           </div>
@@ -627,7 +658,7 @@ export default function Comments() {
 
         {filteredModules.length === 0 && isFiltering && (
           <div className="text-center py-12">
-            <p className={theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}>
+            <p className={theme === 'dark' ? 'text-slate-400' : 'text-white/80'}>
               No modules match your search
             </p>
           </div>
@@ -673,7 +704,8 @@ export default function Comments() {
             ))}
           </Reorder.Group>
         ) : mode === 'edit' ? (
-          filteredModules.map((module, index) => {
+          <div className="space-y-6">
+            {filteredModules.map((module, index) => {
             const isSectionEditing = editingModuleId === module.id;
             return (
               <FeedbackSection
@@ -701,9 +733,11 @@ export default function Comments() {
                 onDeleteModule={handleDeleteModule}
               />
             );
-          })
+          })}
+          </div>
         ) : (
-          filteredModules.map((module, index) => (
+          <div className="space-y-6">
+            {filteredModules.map((module, index) => (
             <FeedbackSection
               key={module.id}
               id={module.id}
@@ -725,7 +759,8 @@ export default function Comments() {
               onDeleteElement={undefined}
               onUpdateModule={undefined}
             />
-          ))
+          ))}
+          </div>
         )}
       </div>
     </div>
