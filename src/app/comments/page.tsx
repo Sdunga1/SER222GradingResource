@@ -41,6 +41,16 @@ const applyModuleOrder = (modules: FeedbackModule[]) =>
   }));
 
 export default function Comments() {
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('commentsAuth') === 'true';
+    }
+    return false;
+  });
+  const [passcodeInput, setPasscodeInput] = useState('');
+  const [passcodeError, setPasscodeError] = useState(false);
+  const [isSiteLocked, setIsSiteLocked] = useState(false);
+  const [checkingLock, setCheckingLock] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [modules, setModules] = useState<FeedbackModule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,6 +77,45 @@ export default function Comments() {
   const { theme, toggleTheme } = useTheme();
   const canManage = true;
 
+  const handlePasscodeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (passcodeInput === 'SER222ASU') {
+      setIsAuthenticated(true);
+      localStorage.setItem('commentsAuth', 'true');
+      setPasscodeError(false);
+    } else {
+      setPasscodeError(true);
+      setPasscodeInput('');
+    }
+  };
+
+  // Check site lock status
+  useEffect(() => {
+    const checkSiteLock = async () => {
+      try {
+        const response = await fetch('/api/site-settings');
+        const data = await response.json();
+        if (data.success && data.locked) {
+          setIsSiteLocked(true);
+          setIsAuthenticated(false);
+          localStorage.removeItem('commentsAuth');
+        } else {
+          setIsSiteLocked(false);
+        }
+      } catch (error) {
+        console.error('Error checking site lock:', error);
+      } finally {
+        setCheckingLock(false);
+      }
+    };
+
+    checkSiteLock();
+
+    // Check lock status every 10 seconds
+    const interval = setInterval(checkSiteLock, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Save mode to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem('commentsPageMode', mode);
@@ -74,6 +123,11 @@ export default function Comments() {
 
   // Fetch modules
   useEffect(() => {
+    if (!isAuthenticated || isSiteLocked) {
+      setLoading(false);
+      return;
+    }
+
     const fetchModules = async () => {
       try {
         setLoading(true);
@@ -94,7 +148,7 @@ export default function Comments() {
     };
 
     fetchModules();
-  }, []);
+  }, [isAuthenticated, isSiteLocked]);
 
   const isFiltering = searchQuery.trim().length > 0;
 
@@ -396,6 +450,147 @@ export default function Comments() {
     }
   }, [canManage, isGlobalEditing, isFiltering, searchQuery, persistModuleOrder]);
 
+  const handleToggleSiteLock = useCallback(async () => {
+    if (!canManage) return;
+    
+    const confirmMessage = isSiteLocked 
+      ? 'Unlock the website for all users?'
+      : 'Lock the website for all users? Everyone will need to enter the passcode again.';
+    
+    if (!window.confirm(confirmMessage)) return;
+
+    try {
+      const response = await fetch('/api/site-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ locked: !isSiteLocked }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setIsSiteLocked(data.locked);
+        if (data.locked) {
+          setIsAuthenticated(false);
+          localStorage.removeItem('commentsAuth');
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling site lock:', error);
+      alert('Failed to toggle site lock');
+    }
+  }, [canManage, isSiteLocked]);
+
+  // Show loading while checking lock status
+  if (checkingLock) {
+    return (
+      <div className={`flex items-center justify-center min-h-screen ${
+        theme === 'dark' ? 'bg-slate-950' : 'bg-white'
+      }`}>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto mb-4"></div>
+          <p className={theme === 'dark' ? 'text-slate-300' : 'text-slate-600'}>
+            Checking access...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Passcode Screen
+  if (!isAuthenticated || isSiteLocked) {
+    return (
+      <div className={`min-h-screen flex items-center justify-center relative ${
+        theme === 'dark' 
+          ? 'bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950' 
+          : 'bg-gradient-to-br from-[#8C1D40] via-[#FFC627] to-[#8C1D40]'
+      }`}>
+        <button
+          onClick={toggleTheme}
+          className={`absolute top-8 right-8 p-3 rounded-lg transition-colors shadow-lg ${
+            theme === 'dark'
+              ? 'bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 backdrop-blur-sm'
+              : 'bg-white/30 hover:bg-white/50 text-white backdrop-blur-sm'
+          }`}
+          aria-label="Toggle theme"
+        >
+          {theme === 'dark' ? (
+            <Sun className="w-5 h-5" />
+          ) : (
+            <Moon className="w-5 h-5" />
+          )}
+        </button>
+
+        <div className={`w-full max-w-md mx-4 p-8 rounded-2xl shadow-2xl backdrop-blur-sm ${
+          theme === 'dark'
+            ? 'bg-slate-900/80 border border-purple-500/30'
+            : 'bg-white/95 border border-[#8C1D40]/20'
+        }`}>
+          <div className="text-center mb-8">
+            <div className={`inline-flex items-center justify-center w-20 h-20 rounded-full mb-4 ${
+              theme === 'dark'
+                ? 'bg-gradient-to-br from-purple-500/20 to-violet-600/20 border border-purple-500/40'
+                : 'bg-gradient-to-br from-[#8C1D40]/10 to-[#FFC627]/10 border border-[#8C1D40]/20'
+            }`}>
+              <svg className={`w-10 h-10 ${
+                theme === 'dark' ? 'text-purple-400' : 'text-[#8C1D40]'
+              }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </div>
+            <h1 className={`text-3xl font-bold mb-2 ${
+              theme === 'dark' ? 'text-white' : 'text-[#8C1D40]'
+            }`}>
+              Access Required
+            </h1>
+            <p className={`text-sm ${
+              theme === 'dark' ? 'text-slate-400' : 'text-[#8C1D40]/70'
+            }`}>
+              Enter passcode to access grading feedback
+            </p>
+          </div>
+
+          <form onSubmit={handlePasscodeSubmit} className="space-y-6">
+            <div>
+              <input
+                type="password"
+                value={passcodeInput}
+                onChange={(e) => {
+                  setPasscodeInput(e.target.value);
+                  setPasscodeError(false);
+                }}
+                placeholder="Enter passcode"
+                autoFocus
+                className={`w-full px-4 py-3 rounded-lg border-2 text-center text-lg font-mono tracking-wider transition-all ${
+                  passcodeError
+                    ? 'border-red-500 bg-red-50/50 text-red-900 placeholder-red-400 animate-shake'
+                    : theme === 'dark'
+                    ? 'border-purple-500/30 bg-slate-800 text-white placeholder-slate-500 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20'
+                    : 'border-[#8C1D40]/30 bg-white text-[#8C1D40] placeholder-[#8C1D40]/40 focus:border-[#8C1D40] focus:ring-2 focus:ring-[#FFC627]/20'
+                } focus:outline-none`}
+              />
+              {passcodeError && (
+                <p className="text-red-500 text-sm mt-2 text-center font-medium">
+                  ❌ Incorrect passcode. Please try again.
+                </p>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              className={`w-full py-3 px-4 rounded-lg font-semibold text-white transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg ${
+                theme === 'dark'
+                  ? 'bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 shadow-purple-500/50'
+                  : 'bg-gradient-to-r from-[#8C1D40] to-[#8C1D40]/90 hover:from-[#8C1D40]/90 hover:to-[#8C1D40]/80 shadow-[#8C1D40]/30'
+              }`}
+            >
+              🔓 Unlock Access
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className={`flex items-center justify-center min-h-screen ${
@@ -569,7 +764,7 @@ export default function Comments() {
         {mode === 'edit' && canManage && (
           <div className="mb-8">
             {!isAddingModule ? (
-              <div className="flex gap-3">
+              <div className="flex gap-3 flex-wrap">
                 <button
                   onClick={() => setIsAddingModule(true)}
                   className={`flex items-center gap-2 px-4 py-2 rounded-xl font-semibold shadow-sm border transition-colors ${
@@ -602,6 +797,35 @@ export default function Comments() {
                         stroke={theme === 'dark' ? '#fff' : '#8C1D40'}
                       />
                       Reorder
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={handleToggleSiteLock}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl font-semibold shadow-sm border transition-colors ${
+                    isSiteLocked
+                      ? theme === 'dark'
+                        ? 'bg-red-600 text-white border-red-700 hover:bg-red-700 shadow-lg'
+                        : 'bg-red-600 text-white border-red-700 hover:bg-red-700 shadow-lg'
+                      : theme === 'dark'
+                      ? 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700'
+                      : 'bg-slate-200 text-slate-900 border-slate-300 hover:bg-slate-300'
+                  }`}
+                  style={{ minHeight: 38 }}
+                >
+                  {isSiteLocked ? (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      Unlock Website
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                      </svg>
+                      Lock Website
                     </>
                   )}
                 </button>

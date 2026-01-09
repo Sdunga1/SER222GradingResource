@@ -120,6 +120,7 @@ export function FeedbackSection({
       await onAddQuestion(sectionId, formContent.trim());
       setFormContent('');
       setActiveForm(null);
+      onStopEditing?.(sectionId);
       toast.success('Question added!');
     } catch (error: any) {
       toast.error(error.message || 'Failed to add question');
@@ -432,6 +433,7 @@ export function FeedbackSection({
                   onClick={() => {
                     setActiveForm(null);
                     setFormContent('');
+                    onStopEditing?.(sectionId);
                   }}
                   disabled={isSubmitting}
                   className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 disabled:opacity-50"
