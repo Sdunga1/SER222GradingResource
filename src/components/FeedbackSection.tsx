@@ -37,6 +37,9 @@ type FeedbackSectionProps = {
   onDeleteElement?: (moduleId: string, questionId: string, elementId: string) => Promise<void>;
   onUpdateModule?: (moduleId: string, newTitle: string) => void;
   onDeleteModule?: (moduleId: string) => Promise<void>;
+  theme: string;
+  copiedId?: string | null;
+  setCopiedId?: (id: string | null) => void;
 } & Omit<React.ComponentProps<'div'>, 'children'>;
 
 export function FeedbackSection({
@@ -60,6 +63,9 @@ export function FeedbackSection({
   onDeleteElement,
   onUpdateModule,
   onDeleteModule,
+  theme,
+  copiedId,
+  setCopiedId,
   ...props
 }: FeedbackSectionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -73,7 +79,6 @@ export function FeedbackSection({
   const [moduleTitle, setModuleTitle] = useState(title);
   const [isSavingTitle, setIsSavingTitle] = useState(false);
   const [isQuestionReorderMode, setIsQuestionReorderMode] = useState(false);
-  const { theme } = useTheme();
 
   useEffect(() => {
     setLocalQuestions(questions);
@@ -456,7 +461,7 @@ export function FeedbackSection({
                 }}
                 className="space-y-2"
               >
-                {localQuestions.map(question => (
+                {localQuestions.map((question, index) => (
                   <Reorder.Item
                     key={question.id}
                     value={question}
@@ -471,8 +476,11 @@ export function FeedbackSection({
                           title={question.title}
                           elements={question.elements}
                           forceOpen={forceOpen}
+                          alternatingBgIndex={index}
                           canManage={canManage}
                           theme={theme}
+                          copiedId={copiedId}
+                          setCopiedId={setCopiedId}
                           onAddElement={async (questionId, content) => {
                             if (onAddElement) {
                               await onAddElement(sectionId, questionId, content);
@@ -505,7 +513,7 @@ export function FeedbackSection({
                 ))}
               </Reorder.Group>
             ) : (
-              localQuestions.map(question => (
+              localQuestions.map((question, index) => (
                 <FeedbackQuestion
                   key={question.id}
                   id={question.id}
@@ -513,8 +521,11 @@ export function FeedbackSection({
                   title={question.title}
                   elements={question.elements}
                   forceOpen={forceOpen}
+                  alternatingBgIndex={index}
                   canManage={canManage}
                   theme={theme}
+                  copiedId={copiedId}
+                  setCopiedId={setCopiedId}
                   onAddElement={async (questionId, content) => {
                     if (onAddElement) {
                       await onAddElement(sectionId, questionId, content);

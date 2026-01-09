@@ -22,6 +22,7 @@ type FeedbackQuestionProps = {
   elements: FeedbackElement[];
   defaultOpen?: boolean;
   forceOpen?: boolean;
+  alternatingBgIndex?: number;
   onElementsReorder?: (updatedElements: FeedbackElement[]) => void;
   isEditing?: boolean;
   onStartEditing?: (questionId: string) => void;
@@ -34,6 +35,8 @@ type FeedbackQuestionProps = {
   onUpdateQuestion?: (questionId: string, newTitle: string) => void;
   onDeleteQuestion?: (questionId: string) => Promise<void>;
   theme: string;
+  copiedId?: string | null;
+  setCopiedId?: (id: string | null) => void;
 } & Omit<React.ComponentProps<'div'>, 'children'>;
 
 export function FeedbackQuestion({
@@ -43,6 +46,7 @@ export function FeedbackQuestion({
   elements,
   defaultOpen = false,
   forceOpen = false,
+  alternatingBgIndex = 0,
   onElementsReorder,
   isEditing = false,
   onStartEditing,
@@ -55,6 +59,8 @@ export function FeedbackQuestion({
   onUpdateQuestion,
   onDeleteQuestion,
   theme,
+  copiedId: propCopiedId,
+  setCopiedId: propSetCopiedId,
   ...props
 }: FeedbackQuestionProps) {
   const [isOpen, setIsOpen] = useState(() => {
@@ -63,10 +69,14 @@ export function FeedbackQuestion({
     return stored !== null ? stored === 'true' : defaultOpen;
   });
   const [localElements, setLocalElements] = useState(elements);
-  const [copiedId, setCopiedId] = useState<string | null>(() => {
+  
+  // Use prop if provided, otherwise fall back to local state for backward compatibility
+  const [localCopiedId, setLocalCopiedId] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
     return localStorage.getItem('lastCopiedElementId');
   });
+  const copiedId = propCopiedId !== undefined ? propCopiedId : localCopiedId;
+  const setCopiedId = propSetCopiedId || setLocalCopiedId;
   const [wasCopiedAgain, setWasCopiedAgain] = useState(false);
   const [activeForm, setActiveForm] = useState<{
     mode: 'create' | 'edit';
@@ -244,8 +254,10 @@ export function FeedbackQuestion({
       {/* Question Header */}
       {isEditingTitle ? (
         <div
-          className={`w-full px-4 py-3 flex items-center gap-3 transition-colors ${
-            theme === 'dark' ? 'hover:bg-slate-700/50' : 'hover:bg-slate-50'
+          className={`w-full px-4 py-3 flex items-center gap-3 transition-colors border-l-4 ${
+            theme === 'dark'
+              ? 'hover:bg-slate-700/50 border-[#8C1D40] bg-slate-800/40'
+              : 'hover:bg-amber-50/50 border-[#8C1D40] bg-amber-50/30'
           } ${editingBanner ?? ''}`}
         >
           <ChevronDown
@@ -300,8 +312,10 @@ export function FeedbackQuestion({
       ) : (
         <div
           onClick={() => setIsOpen(!isOpen)}
-          className={`w-full px-4 py-3 flex items-center gap-3 transition-colors cursor-pointer ${
-            theme === 'dark' ? 'hover:bg-slate-700/50' : 'hover:bg-slate-50'
+          className={`w-full px-4 py-3 flex items-center gap-3 transition-colors cursor-pointer border-l-4 ${
+            theme === 'dark'
+              ? 'hover:bg-slate-700/70 border-[#8C1D40] bg-slate-800/30'
+              : 'hover:bg-amber-100/50 border-[#8C1D40] bg-amber-50/30'
           } ${editingBanner ?? ''}`}
         >
           <ChevronDown
@@ -311,8 +325,8 @@ export function FeedbackQuestion({
           />
           <div className="flex items-center gap-2 flex-1">
             <h4
-              className={`text-sm font-medium ${
-                theme === 'dark' ? 'text-slate-200' : 'text-slate-800'
+              className={`text-sm font-semibold ${
+                theme === 'dark' ? 'text-[#FFC627]' : 'text-[#8C1D40]'
               }`}
             >
               {questionTitle}
@@ -486,7 +500,7 @@ export function FeedbackQuestion({
                 onReorder={handleReorder}
                 className="space-y-2"
               >
-                {localElements.map(element => (
+                {localElements.map((element, idx) => (
                   <Reorder.Item
                     key={element.id}
                     value={element}
@@ -498,6 +512,7 @@ export function FeedbackQuestion({
                         <FeedbackElementRow
                           element={element}
                           theme={theme}
+                          index={idx}
                           onCopy={handleCopy}
                           copiedId={copiedId}
                           wasCopiedAgain={wasCopiedAgain}
@@ -523,11 +538,12 @@ export function FeedbackQuestion({
             </div>
           ) : (
             <div className="p-2 space-y-1">
-              {localElements.map(element => (
+              {localElements.map((element, idx) => (
                 <FeedbackElementRow
                   key={element.id}
                   element={element}
                   theme={theme}
+                  index={idx}
                   onCopy={handleCopy}
                   copiedId={copiedId}
                   wasCopiedAgain={wasCopiedAgain}
@@ -557,6 +573,7 @@ export function FeedbackQuestion({
 interface FeedbackElementRowProps {
   element: FeedbackElement;
   theme: string;
+  index: number;
   onCopy: (content: string, elementId: string) => void;
   copiedId: string | null;
   wasCopiedAgain: boolean;
@@ -569,6 +586,7 @@ interface FeedbackElementRowProps {
 function FeedbackElementRow({
   element,
   theme,
+  index,
   onCopy,
   copiedId,
   wasCopiedAgain,
@@ -583,14 +601,20 @@ function FeedbackElementRow({
     }
   };
 
+  const isEven = index % 2 === 0;
+
   return (
     <div
-      className={`group transition-colors relative rounded border ${
+      className={`group transition-colors relative rounded border border-l-4 ${
         !canManage && copiedId === element.id
           ? 'border-green-500 bg-green-500/10'
           : theme === 'dark'
-          ? 'border-slate-700 bg-slate-800/30'
-          : 'border-slate-200 bg-white'
+          ? isEven
+            ? 'border-slate-600 border-l-slate-500 bg-slate-700/40'
+            : 'border-slate-700 border-l-slate-600 bg-slate-800/50'
+          : isEven
+          ? 'border-amber-200/30 border-l-slate-300 bg-white'
+          : 'border-amber-200/50 border-l-slate-400 bg-amber-50/60'
       } ${!canManage ? 'cursor-pointer' : ''} p-2`}
       onClick={!canManage ? handleRowClick : undefined}
     >

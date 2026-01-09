@@ -58,6 +58,12 @@ export default function Comments() {
   const [moduleOrderDirty, setModuleOrderDirty] = useState(false);
   const [isAddingModule, setIsAddingModule] = useState(false);
   const [newModuleTitle, setNewModuleTitle] = useState('');
+  const [copiedId, setCopiedId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('lastCopiedElementId');
+    }
+    return null;
+  });
   const { theme, toggleTheme } = useTheme();
   const canManage = true;
 
@@ -438,9 +444,13 @@ export default function Comments() {
       {/* Header - Title Only */}
       <div className={`border-b ${
         theme === 'dark'
-          ? 'border-slate-800/40 bg-slate-950'
+          ? 'border-slate-700/50'
           : 'border-[#FFC627]/30 bg-[#8C1D40]/95 backdrop-blur-sm'
-      }`}>
+      }`}
+      style={theme === 'dark' ? {
+        background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 50%, #020617 100%)'
+      } : undefined}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <h1 className={`text-3xl font-bold ${theme === 'dark' ? '' : 'text-[#FFC627]'}`}>SER222 Grading Notes</h1>
           <p className={`${theme === 'dark' ? 'text-slate-400' : 'text-[#FFC627]/80'} mt-1`}>
@@ -452,9 +462,13 @@ export default function Comments() {
       {/* Controls - Search and Mode Toggle */}
       <div className={`sticky top-0 z-40 border-b ${
         theme === 'dark'
-          ? 'border-slate-800/40 bg-slate-950/80'
+          ? 'border-slate-700/50'
           : 'border-[#FFC627]/30 bg-[#8C1D40]/95'
-      } backdrop-blur-sm`}>
+      } backdrop-blur-sm`}
+      style={theme === 'dark' ? {
+        background: 'linear-gradient(135deg, rgba(30,41,59,0.95) 0%, rgba(15,23,42,0.95) 50%, rgba(2,6,23,0.95) 100%)'
+      } : undefined}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             {/* Search */}
@@ -699,6 +713,9 @@ export default function Comments() {
                   onDeleteElement={handleDeleteElement}
                   onUpdateModule={handleUpdateModule}
                   onDeleteModule={handleDeleteModule}
+                  theme={theme}
+                  copiedId={copiedId}
+                  setCopiedId={setCopiedId}
                 />
               </Reorder.Item>
             ))}
@@ -731,6 +748,9 @@ export default function Comments() {
                 onDeleteElement={handleDeleteElement}
                 onUpdateModule={handleUpdateModule}
                 onDeleteModule={handleDeleteModule}
+                theme={theme}
+                copiedId={copiedId}
+                setCopiedId={setCopiedId}
               />
             );
           })}
@@ -758,6 +778,9 @@ export default function Comments() {
               onUpdateElement={undefined}
               onDeleteElement={undefined}
               onUpdateModule={undefined}
+              theme={theme}
+              copiedId={copiedId}
+              setCopiedId={setCopiedId}
             />
           ))}
           </div>
