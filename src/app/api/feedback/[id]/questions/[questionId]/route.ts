@@ -3,7 +3,7 @@ import { query } from '@/lib/db';
 
 // GET a specific question
 export async function GET(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ id: string; questionId: string }> }
 ) {
   try {
@@ -115,7 +115,7 @@ export async function PUT(
 
 // DELETE a question
 export async function DELETE(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ id: string; questionId: string }> }
 ) {
   try {

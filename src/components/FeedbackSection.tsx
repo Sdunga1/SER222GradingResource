@@ -11,7 +11,6 @@ import {
 } from 'lucide-react';
 import { ChevronsUpDown } from './icons/ChevronsUpDown';
 import { Reorder } from 'framer-motion';
-import { useTheme } from '../contexts/ThemeContext';
 import { toast } from 'sonner';
 import { FeedbackQuestion } from './FeedbackQuestion';
 import type { FeedbackQuestion as FeedbackQuestionType } from '@/types/feedback';

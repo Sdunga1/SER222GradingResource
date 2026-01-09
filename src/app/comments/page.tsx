@@ -696,7 +696,7 @@ export default function Comments() {
                   questions={module.questions}
                   defaultOpen={isFiltering || index === 0}
                   forceOpen={isFiltering}
-                  onQuestionsReorder={(updated: FeedbackQuestion[]) => {
+                  onQuestionsReorder={(_updated: FeedbackQuestion[]) => {
                     // Handle question reordering if needed
                   }}
                   isEditing={true}
@@ -732,7 +732,7 @@ export default function Comments() {
                 questions={module.questions}
                 defaultOpen={isFiltering || index === 0}
                 forceOpen={isFiltering}
-                onQuestionsReorder={(updated: FeedbackQuestion[]) => {
+                onQuestionsReorder={(_updated: FeedbackQuestion[]) => {
                   // Handle question reordering if needed
                 }}
                 isEditing={isSectionEditing}

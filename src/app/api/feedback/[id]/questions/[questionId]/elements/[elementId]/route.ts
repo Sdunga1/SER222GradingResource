@@ -61,7 +61,7 @@ export async function PUT(
 
 // DELETE a feedback element
 export async function DELETE(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ id: string; questionId: string; elementId: string }> }
 ) {
   try {
