@@ -10,6 +10,10 @@ CREATE TABLE IF NOT EXISTS site_settings (
 INSERT INTO site_settings (key, value) VALUES ('site_locked', 'false')
 ON CONFLICT (key) DO NOTHING;
 
+-- Insert lock timestamp
+INSERT INTO site_settings (key, value) VALUES ('lock_timestamp', '0')
+ON CONFLICT (key) DO NOTHING;
+
 -- Create trigger to update updated_at
 CREATE TRIGGER update_site_settings_updated_at 
     BEFORE UPDATE ON site_settings 

@@ -49,6 +49,7 @@ export default function Comments() {
   });
   const [passcodeInput, setPasscodeInput] = useState('');
   const [passcodeError, setPasscodeError] = useState(false);
+  const [showPasscode, setShowPasscode] = useState(false);
   const [isSiteLocked, setIsSiteLocked] = useState(false);
   const [checkingLock, setCheckingLock] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -77,12 +78,26 @@ export default function Comments() {
   const { theme, toggleTheme } = useTheme();
   const canManage = true;
 
-  const handlePasscodeSubmit = (e: React.FormEvent) => {
+  const handlePasscodeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (passcodeInput === 'SER222ASU') {
+      const authTimestamp = Date.now().toString();
       setIsAuthenticated(true);
       localStorage.setItem('commentsAuth', 'true');
+      localStorage.setItem('commentsAuthTimestamp', authTimestamp);
       setPasscodeError(false);
+      
+      // Automatically unlock the site globally when correct passcode is entered
+      try {
+        await fetch('/api/site-settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ locked: false }),
+        });
+        setIsSiteLocked(false);
+      } catch (error) {
+        console.error('Error unlocking site:', error);
+      }
     } else {
       setPasscodeError(true);
       setPasscodeInput('');
@@ -95,12 +110,18 @@ export default function Comments() {
       try {
         const response = await fetch('/api/site-settings');
         const data = await response.json();
-        if (data.success && data.locked) {
-          setIsSiteLocked(true);
-          setIsAuthenticated(false);
-          localStorage.removeItem('commentsAuth');
-        } else {
-          setIsSiteLocked(false);
+        if (data.success) {
+          const lockTimestamp = parseInt(data.lockTimestamp || '0');
+          const authTimestamp = parseInt(localStorage.getItem('commentsAuthTimestamp') || '0');
+          
+          setIsSiteLocked(data.locked);
+          
+          // If site was locked after user's authentication, force re-authentication
+          if (data.locked && lockTimestamp > authTimestamp) {
+            setIsAuthenticated(false);
+            localStorage.removeItem('commentsAuth');
+            localStorage.removeItem('commentsAuthTimestamp');
+          }
         }
       } catch (error) {
         console.error('Error checking site lock:', error);
@@ -123,7 +144,7 @@ export default function Comments() {
 
   // Fetch modules
   useEffect(() => {
-    if (!isAuthenticated || isSiteLocked) {
+    if (!isAuthenticated) {
       setLoading(false);
       return;
     }
@@ -148,7 +169,7 @@ export default function Comments() {
     };
 
     fetchModules();
-  }, [isAuthenticated, isSiteLocked]);
+  }, [isAuthenticated]);
 
   const isFiltering = searchQuery.trim().length > 0;
 
@@ -450,35 +471,31 @@ export default function Comments() {
     }
   }, [canManage, isGlobalEditing, isFiltering, searchQuery, persistModuleOrder]);
 
-  const handleToggleSiteLock = useCallback(async () => {
+  const handleLockSite = useCallback(async () => {
     if (!canManage) return;
     
-    const confirmMessage = isSiteLocked 
-      ? 'Unlock the website for all users?'
-      : 'Lock the website for all users? Everyone will need to enter the passcode again.';
-    
-    if (!window.confirm(confirmMessage)) return;
+    if (!window.confirm('Lock the website for all users? Everyone will need to enter the passcode again to unlock.')) return;
 
     try {
       const response = await fetch('/api/site-settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ locked: !isSiteLocked }),
+        body: JSON.stringify({ locked: true }),
       });
 
       const data = await response.json();
       if (data.success) {
-        setIsSiteLocked(data.locked);
-        if (data.locked) {
-          setIsAuthenticated(false);
-          localStorage.removeItem('commentsAuth');
-        }
+        setIsSiteLocked(true);
+        // Lock yourself out too
+        setIsAuthenticated(false);
+        localStorage.removeItem('commentsAuth');
+        localStorage.removeItem('commentsAuthTimestamp');
       }
     } catch (error) {
-      console.error('Error toggling site lock:', error);
-      alert('Failed to toggle site lock');
+      console.error('Error locking site:', error);
+      alert('Failed to lock site');
     }
-  }, [canManage, isSiteLocked]);
+  }, [canManage]);
 
   // Show loading while checking lock status
   if (checkingLock) {
@@ -496,8 +513,8 @@ export default function Comments() {
     );
   }
 
-  // Passcode Screen
-  if (!isAuthenticated || isSiteLocked) {
+  // Passcode Screen - show only if not authenticated
+  if (!isAuthenticated) {
     return (
       <div className={`min-h-screen flex items-center justify-center relative ${
         theme === 'dark' 
@@ -540,19 +557,21 @@ export default function Comments() {
             <h1 className={`text-3xl font-bold mb-2 ${
               theme === 'dark' ? 'text-white' : 'text-[#8C1D40]'
             }`}>
-              Access Required
+              {isSiteLocked ? 'Site Locked' : 'Access Required'}
             </h1>
             <p className={`text-sm ${
               theme === 'dark' ? 'text-slate-400' : 'text-[#8C1D40]/70'
             }`}>
-              Enter passcode to access grading feedback
+              {isSiteLocked 
+                ? 'This site has been locked by an editor. Enter passcode to access.'
+                : 'Enter passcode to access grading feedback'}
             </p>
           </div>
 
           <form onSubmit={handlePasscodeSubmit} className="space-y-6">
-            <div>
+            <div className="relative">
               <input
-                type="password"
+                type={showPasscode ? "text" : "password"}
                 value={passcodeInput}
                 onChange={(e) => {
                   setPasscodeInput(e.target.value);
@@ -560,7 +579,7 @@ export default function Comments() {
                 }}
                 placeholder="Enter passcode"
                 autoFocus
-                className={`w-full px-4 py-3 rounded-lg border-2 text-center text-lg font-mono tracking-wider transition-all ${
+                className={`w-full px-4 py-3 pr-12 rounded-lg border-2 text-center text-lg font-mono tracking-wider transition-all ${
                   passcodeError
                     ? 'border-red-500 bg-red-50/50 text-red-900 placeholder-red-400 animate-shake'
                     : theme === 'dark'
@@ -568,6 +587,27 @@ export default function Comments() {
                     : 'border-[#8C1D40]/30 bg-white text-[#8C1D40] placeholder-[#8C1D40]/40 focus:border-[#8C1D40] focus:ring-2 focus:ring-[#FFC627]/20'
                 } focus:outline-none`}
               />
+              <button
+                type="button"
+                onClick={() => setShowPasscode(!showPasscode)}
+                className={`absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-colors ${
+                  theme === 'dark'
+                    ? 'hover:bg-slate-700 text-slate-400'
+                    : 'hover:bg-slate-100 text-slate-600'
+                }`}
+                aria-label="Toggle passcode visibility"
+              >
+                {showPasscode ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                )}
+              </button>
               {passcodeError && (
                 <p className="text-red-500 text-sm mt-2 text-center font-medium">
                   ❌ Incorrect passcode. Please try again.
@@ -801,33 +841,18 @@ export default function Comments() {
                   )}
                 </button>
                 <button
-                  onClick={handleToggleSiteLock}
+                  onClick={handleLockSite}
                   className={`flex items-center gap-2 px-4 py-2 rounded-xl font-semibold shadow-sm border transition-colors ${
-                    isSiteLocked
-                      ? theme === 'dark'
-                        ? 'bg-red-600 text-white border-red-700 hover:bg-red-700 shadow-lg'
-                        : 'bg-red-600 text-white border-red-700 hover:bg-red-700 shadow-lg'
-                      : theme === 'dark'
+                    theme === 'dark'
                       ? 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700'
                       : 'bg-slate-200 text-slate-900 border-slate-300 hover:bg-slate-300'
                   }`}
                   style={{ minHeight: 38 }}
                 >
-                  {isSiteLocked ? (
-                    <>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                      </svg>
-                      Unlock Website
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                      </svg>
-                      Lock Website
-                    </>
-                  )}
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  Lock Website
                 </button>
               </div>
             ) : (
